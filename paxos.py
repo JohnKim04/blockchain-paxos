@@ -28,6 +28,9 @@ class PaxosInstance:
         
         # Timeout handling
         self.proposal_timer = None
+        
+        # Track decided blocks to prevent duplicate processing
+        self.decided_blocks = set()  # Set of block hashes that have been decided
 
     def compare_ballots(self, b1, b2):
         """
@@ -84,8 +87,25 @@ class PaxosInstance:
         
     def handle_timeout(self):
         if not self.is_leader and self.my_proposal_val:
+             # Check if node is still active (via callback if provided)
+             if hasattr(self, 'is_node_active') and not self.is_node_active():
+                 Logger.log(self.node_id, f"[PAXOS] Proposal Timeout, but node is failed. Cancelling retry.")
+                 self.proposal_timer = None
+                 return
              Logger.log(self.node_id, f"[PAXOS] Proposal Timeout. Restarting with higher seq_num.")
              self.prepare(self.my_proposal_val)
+    
+    def cancel_proposal(self):
+        """Cancel any pending proposal timer. Called when node fails."""
+        if self.proposal_timer:
+            self.proposal_timer.cancel()
+            self.proposal_timer = None
+            Logger.log(self.node_id, "[PAXOS] Cancelled pending proposal due to node failure.")
+        # Clear proposal state
+        self.my_proposal_val = None
+        self.is_leader = False
+        self.promises = {}
+        self.accepts_received = set()
 
     def handle_prepare(self, msg):
         """
@@ -208,8 +228,13 @@ class PaxosInstance:
                 self.proposal_timer = None
                 
             # Ensure we only decide once per ballot
-            # (Though deciding multiple times for same val is fine)
-            Logger.log(self.node_id, f"[PAXOS] Consensus reached on val: {msg['val']['hash'] if msg['val'] else 'None'}")
+            # Check if we've already decided this value to prevent duplicate broadcasts
+            val_hash = msg['val']['hash'] if msg['val'] else None
+            if val_hash and val_hash in self.decided_blocks:
+                # Already decided, don't broadcast again
+                return
+            
+            Logger.log(self.node_id, f"[PAXOS] Consensus reached on val: {val_hash if val_hash else 'None'}")
             
             decide_msg = {
                 "type": "DECIDE",
@@ -218,7 +243,7 @@ class PaxosInstance:
             }
             self.broadcast(decide_msg)
             
-            # Also decide locally
+            # Also decide locally (deduplication handled in handle_decide)
             self.handle_decide(decide_msg)
             
             # Reset/Advance state? 
@@ -231,7 +256,20 @@ class PaxosInstance:
         Step 6: Learner receives DECIDE.
         """
         val = msg['val']
+        if not val:
+            return
+        
+        # Deduplication: Check if we've already processed this block
+        block_hash = val.get('hash')
+        if block_hash and block_hash in self.decided_blocks:
+            Logger.log(self.node_id, f"[PAXOS] DECIDE for block {block_hash[:16]}... already processed, ignoring duplicate")
+            return
+        
         Logger.log(self.node_id, f"[PAXOS] DECIDE received. Committing block.")
+        
+        # Mark as decided before processing (prevents race conditions)
+        if block_hash:
+            self.decided_blocks.add(block_hash)
         
         # Cancel any pending proposal timeout since a decision was made for this depth
         if self.proposal_timer:

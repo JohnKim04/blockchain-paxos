@@ -110,6 +110,12 @@ class Blockchain:
         Updates balance table.
         Returns True if successful, False if invalid.
         """
+        # 0. Check if block already exists (deduplication)
+        for existing_block in self.chain:
+            if existing_block.hash == block.hash:
+                Logger.log(self.node_id, f"Block already exists in chain (hash: {block.hash[:16]}...), skipping")
+                return True  # Already added, consider it successful
+        
         # 1. Validate Prev Hash
         current_tip_hash = self.chain[-1].hash if self.chain else "0"*64
         if block.prev_hash != current_tip_hash:
