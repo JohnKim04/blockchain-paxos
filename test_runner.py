@@ -158,6 +158,93 @@ class TestRunner:
         print("\n✓ Test 5 complete. Check all nodes:")
         print("   - System should have made progress")
         print("   - Node 1 should have synced after recovery")
+
+    def test_partition(self):
+        """Test 7: Network partition (minority vs majority)"""
+        print("\n" + "="*60)
+        print("TEST 7: Network Partition (Minority vs Majority)")
+        print("="*60)
+
+        print("\n📝 Partition setup (two islands):")
+        print("   Group A: Nodes 1,2   |   Group B: Nodes 3,4,5")
+        print("   In Node 1 terminal: failLink 3 ; failLink 4 ; failLink 5")
+        print("   In Node 2 terminal: failLink 3 ; failLink 4 ; failLink 5")
+        print("   In Node 3 terminal: failLink 1 ; failLink 2")
+        print("   In Node 4 terminal: failLink 1 ; failLink 2")
+        print("   In Node 5 terminal: failLink 1 ; failLink 2")
+        input("\n   Press Enter after partition is configured on all nodes...")
+
+        print("\n📝 Step A (Minority failure expected):")
+        print("   In Node 1 terminal: moneyTransfer 2 10")
+        print("   Expected: hangs/times out (no quorum, only 2/5 reachable)")
+        input("   Press Enter after sending command...")
+        self.wait(30)
+
+        print("\n📝 Step B (Majority success expected):")
+        print("   In Node 3 terminal: moneyTransfer 4 10")
+        print("   Expected: succeeds (quorum 3/5 reachable)")
+        input("   Press Enter after sending command...")
+        self.wait(30)
+
+        print("\n📝 Step C: Heal partition on all nodes")
+        print("   Run on each node: fixLink all")
+        input("   Press Enter after healing all links...")
+        self.wait(8)
+
+        print("\n📝 Step D: Verify sync")
+        print("   On ALL nodes, type:")
+        print("   - printBlockchain")
+        print("   - printBalance")
+        print("   Expected: Nodes 1 and 2 have learned the block(s) from the majority.")
+        print("\n✓ Test 7 complete.")
+    
+    def test_multiple_node_failure(self):
+        """Test 6: Multiple node failures (2 nodes)"""
+        print("\n" + "="*60)
+        print("TEST 6: Multiple Node Failures (2 Nodes)")
+        print("="*60)
+        
+        print("\n📝 Step 1: Fail 2 nodes (Node 4 and Node 5)")
+        print("   In Node 4 terminal: failProcess")
+        print("   In Node 5 terminal: failProcess")
+        print("   (Fail both nodes)")
+        input("   Press Enter after failing both nodes...")
+        
+        self.wait(2)
+        
+        print("\n📝 Step 2: Transaction with 3 remaining nodes")
+        print("   System should still work (majority = 3 out of 5)")
+        print("   In Node 1 terminal: moneyTransfer 2 30")
+        input("   Press Enter after sending command...")
+        
+        self.wait(25)
+        
+        print("\n📝 Step 3: Another transaction with 3 nodes")
+        print("   In Node 2 terminal: moneyTransfer 3 20")
+        input("   Press Enter after sending command...")
+        
+        self.wait(25)
+        
+        print("\n📝 Step 4: Recover Node 4")
+        print("   In Node 4 terminal: fixProcess")
+        input("   Press Enter after sending command...")
+        
+        self.wait(5)
+        
+        print("\n📝 Step 5: Recover Node 5")
+        print("   In Node 5 terminal: fixProcess")
+        input("   Press Enter after sending command...")
+        
+        self.wait(10)
+        
+        print("\n✓ Test 6 complete. Now verify:")
+        print("   On ALL nodes, type:")
+        print("   - printBlockchain")
+        print("   - printBalance")
+        print("\n   ✓ All nodes should have 2 blocks")
+        print("   ✓ All nodes should have identical blockchains")
+        print("   ✓ Node 4 and Node 5 should have synced after recovery")
+        print("   ✓ System should have continued with 3 nodes (majority)")
     
     def cleanup_state(self):
         """Clean up state files"""
@@ -206,6 +293,8 @@ def main():
         "3": ("Insufficient Funds", runner.test_insufficient_funds),
         "4": ("Node Failure", runner.test_node_failure),
         "5": ("Leader Failure", runner.test_leader_failure),
+        "6": ("Multiple Node Failures", runner.test_multiple_node_failure),
+        "7": ("Network Partition (Minority vs Majority)", runner.test_partition),
     }
     
     print("\nAvailable tests:")
@@ -214,7 +303,7 @@ def main():
     print("  all. Run all tests")
     print("  clean. Clean state files")
     
-    choice = input("\nSelect test (1-5, all, or clean): ").strip().lower()
+    choice = input("\nSelect test (1-7, all, or clean): ").strip().lower()
     
     if choice == "clean":
         runner.cleanup_state()

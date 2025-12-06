@@ -31,6 +31,8 @@ class PaxosInstance:
         
         # Track decided blocks to prevent duplicate processing
         self.decided_blocks = set()  # Set of block hashes that have been decided
+        # Track if current ballot has already been decided/logged (prevents duplicate logs/broadcasts)
+        self.current_ballot_decided = None
 
     def compare_ballots(self, b1, b2):
         """
@@ -233,6 +235,11 @@ class PaxosInstance:
             if val_hash and val_hash in self.decided_blocks:
                 # Already decided, don't broadcast again
                 return
+            # Also suppress duplicate consensus logs for the same ballot
+            ballot_tuple = tuple(ballot)
+            if self.current_ballot_decided == ballot_tuple:
+                return
+            self.current_ballot_decided = ballot_tuple
             
             Logger.log(self.node_id, f"[PAXOS] Consensus reached on val: {val_hash if val_hash else 'None'}")
             

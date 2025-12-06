@@ -55,9 +55,25 @@ python3 node.py 5
 - Node 1: `fixProcess` → Wait ~10s
 - **Verify**: System made progress, Node 1 synced
 
-### 💥💥 Test 6: Multiple Failures
+### 💥💥 Test 6: Multiple Node Failures (2 Nodes)
 - Node 4: `failProcess`
 - Node 5: `failProcess`
+- Node 1: `moneyTransfer 2 30` → Wait ~25s
+- Node 2: `moneyTransfer 3 20` → Wait ~25s
+- Node 4: `fixProcess`
+- Node 5: `fixProcess` → Wait ~10s
+- **Verify**: All nodes synced, system worked with 3 nodes
+
+### 🌐 Test 7: Network Partition (Minority vs Majority)
+- Partition into islands:
+  - On Node 1/2: `failLink 3`, `failLink 4`, `failLink 5`
+  - On Node 3/4/5: `failLink 1`, `failLink 2`
+- Minority attempt (expected fail/hang): Node 1: `moneyTransfer 2 10` → Wait ~30s
+- Majority attempt (expected succeed): Node 3: `moneyTransfer 4 10` → Wait ~30s
+- Heal: on all nodes: `fixLink all` → Wait ~8s
+- **Verify**: All nodes synced; Nodes 1/2 learn the block from majority
+
+### 💥💥 Test 8: Multiple Failures (Alternative)
 - Node 1: `moneyTransfer 2 30` → Wait ~25s
 - Node 2: `moneyTransfer 3 20` → Wait ~25s
 - Node 4: `fixProcess`

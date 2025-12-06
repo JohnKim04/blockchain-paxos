@@ -13,6 +13,8 @@ class Block:
         self.nonce = nonce if nonce is not None else self.calculate_nonce()
         # The hash of this block, which becomes the prev_hash for the next block
         self.hash = self.compute_block_hash()
+        # Log hash pointer details for debugging/demo
+        Logger.log(self.sender, f"Block created: nonce={self.nonce}, block_hash={self.hash}, prev_hash={self.prev_hash}")
 
     def calculate_nonce(self):
         """
@@ -29,6 +31,8 @@ class Block:
             h = compute_hash(data)
             
             if verify_nonce(h):
+                # Log the successful nonce and its PoW hash for debugging/demo
+                Logger.log(self.sender, f"PoW found: nonce={nonce}, pow_hash={h}")
                 return nonce
 
     def compute_block_hash(self):
@@ -145,6 +149,7 @@ class Blockchain:
         self.balance_table[block.receiver] += block.amount
         
         Logger.log(self.node_id, f"Block added: {block.sender}->{block.receiver} ${block.amount}. New Balance: {self.balance_table}")
+        Logger.log(self.node_id, f"Hash pointer: {block.prev_hash} -> {block.hash}")
         return True
 
     def save_to_disk(self):

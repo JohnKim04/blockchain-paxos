@@ -27,6 +27,7 @@ class Node:
         self.blockchain.load_from_disk()
 
         self.failed = False # Simulation flag
+        self.network_partition = set()  # Node IDs this node will not communicate with (soft partition)
         self.syncing = False  # Flag to track if we're currently syncing
         self.sync_responses = []  # Store blockchain responses during sync
         
@@ -97,6 +98,11 @@ class Node:
             
             try:
                 msg = json.loads(message_str)
+                # Soft partition at receiver side: drop if sender is blocked
+                sender_id = str(msg.get('sender'))
+                if sender_id and sender_id in self.network_partition:
+                    Logger.log(self.node_id, f"Soft-partition drop: ignoring message from Node {sender_id}")
+                    return
                 self.process_message(msg)
             except json.JSONDecodeError:
                 Logger.log(self.node_id, f"Received invalid JSON: {message_str}")
@@ -132,6 +138,10 @@ class Node:
         # Don't send messages if node is failed
         if self.failed:
             return
+        # Soft partition: drop if target is blocked
+        if str(target_id) in self.network_partition:
+            Logger.log(self.node_id, f"Soft-partition drop: not sending to Node {target_id}")
+            return
             
         target_id = str(target_id)
         if target_id not in self.config:
@@ -147,6 +157,9 @@ class Node:
             time.sleep(3) # 3-second delay
             # Final check before sending
             if self.failed:
+                return
+            if target_id in self.network_partition:
+                Logger.log(self.node_id, f"Soft-partition drop (post-delay): not sending to Node {target_id}")
                 return
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -386,7 +399,7 @@ class Node:
 
     def handle_cli(self):
         print(f"Node {self.node_id} CLI ready.")
-        print("Commands: moneyTransfer <dest> <amt>, failProcess, fixProcess, printBlockchain, printBalance, exit")
+        print("Commands: moneyTransfer <dest> <amt>, failProcess, fixProcess, failLink <nid>, fixLink <nid|all>, printBlockchain, printBalance, exit")
         
         while self.running:
             try:
@@ -427,6 +440,26 @@ class Node:
                     # Sync with other nodes after recovery
                     time.sleep(1)  # Give a moment for network to be ready
                     self.sync_blockchain()
+
+                elif cmd == "failLink" and len(parts) == 2:
+                    target = parts[1]
+                    if target == self.node_id:
+                        print("Cannot fail link to self.")
+                        continue
+                    self.network_partition.add(target)
+                    Logger.log(self.node_id, f"Link to Node {target} soft-failed (messages will be dropped).")
+
+                elif cmd == "fixLink" and len(parts) == 2:
+                    target = parts[1]
+                    if target == "all":
+                        self.network_partition.clear()
+                        Logger.log(self.node_id, "All soft-failed links cleared.")
+                        # After healing the network, attempt to resync in case we missed blocks
+                        Logger.log(self.node_id, "Link heal detected, requesting blockchain sync...")
+                        self.sync_blockchain()
+                    else:
+                        self.network_partition.discard(target)
+                        Logger.log(self.node_id, f"Link to Node {target} restored.")
 
                 elif cmd == "printBlockchain":
                     print(json.dumps([b.to_dict() for b in self.blockchain.chain], indent=2))
