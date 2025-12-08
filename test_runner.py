@@ -1,12 +1,4 @@
 #!/usr/bin/env python3
-"""
-Test guide and helper for blockchain-paxos system.
-This script provides step-by-step testing instructions.
-
-NOTE: Nodes accept commands via stdin (CLI), not TCP. 
-You'll need to manually type commands in each node's terminal.
-This script provides a guided checklist for testing.
-"""
 
 import time
 import sys
@@ -14,7 +6,7 @@ import sys
 class TestRunner:
     def wait(self, seconds):
         """Wait and print progress"""
-        print(f"\n⏳ Waiting {seconds} seconds for consensus...")
+        print(f"\n Waiting {seconds} seconds for consensus...")
         print("   (Watch the node terminals for Paxos messages)")
         for i in range(seconds):
             time.sleep(1)
@@ -27,14 +19,14 @@ class TestRunner:
         print("TEST 1: Sequential Transfers")
         print("="*60)
         
-        print("\n📝 MANUAL STEPS:")
+        print("\ MANUAL STEPS:")
         print("   1. In Node 1 terminal, type: moneyTransfer 2 30")
         print("   2. Press Enter")
         input("\n   Press Enter after you've sent the command...")
         
-        self.wait(25)  # Wait for consensus
+        self.wait(25)
         
-        print("\n📝 Next step:")
+        print("\ Next step:")
         print("   3. In Node 2 terminal, type: moneyTransfer 3 20")
         print("   4. Press Enter")
         input("\n   Press Enter after you've sent the command...")
@@ -54,14 +46,14 @@ class TestRunner:
         print("TEST 2: Concurrent Transfers (Multiple Leaders)")
         print("="*60)
         
-        print("\n📝 MANUAL STEPS (do these QUICKLY, within 1-2 seconds):")
+        print("\ MANUAL STEPS (do these QUICKLY, within 1-2 seconds):")
         print("   1. In Node 1 terminal: moneyTransfer 2 10")
         print("   2. In Node 3 terminal: moneyTransfer 4 15")
         print("   3. In Node 5 terminal: moneyTransfer 1 20")
         print("\n   Type all three commands quickly, then press Enter here...")
         input()
         
-        print("\n⏳ Waiting for all consensus rounds to complete...")
+        print("\n Waiting for all consensus rounds to complete...")
         self.wait(45)
         
         print("\n✓ Test 2 complete. Now verify:")
@@ -78,7 +70,7 @@ class TestRunner:
         print("TEST 3: Insufficient Funds")
         print("="*60)
         
-        print("\n📝 MANUAL STEP:")
+        print("\ MANUAL STEP:")
         print("   In Node 1 terminal, type: moneyTransfer 2 150")
         print("   (Node 1 only has $100, so this should fail)")
         input("\n   Press Enter after you've sent the command...")
@@ -96,25 +88,25 @@ class TestRunner:
         print("TEST 4: Single Node Failure (Non-Leader)")
         print("="*60)
         
-        print("\n📝 Step 1: Normal transaction")
+        print("\ Step 1: Normal transaction")
         print("   In Node 1 terminal: moneyTransfer 2 30")
         input("   Press Enter after sending command...")
         
         self.wait(25)
         
-        print("\n📝 Step 2: Fail Node 3")
+        print("\ Step 2: Fail Node 3")
         print("   In Node 3 terminal: failProcess")
         input("   Press Enter after sending command...")
         
         self.wait(2)
         
-        print("\n📝 Step 3: Transaction with 4 nodes")
+        print("\ Step 3: Transaction with 4 nodes")
         print("   In Node 2 terminal: moneyTransfer 4 20")
         input("   Press Enter after sending command...")
         
         self.wait(25)
         
-        print("\n📝 Step 4: Recover Node 3")
+        print("\ Step 4: Recover Node 3")
         print("   In Node 3 terminal: fixProcess")
         input("   Press Enter after sending command...")
         
@@ -130,26 +122,26 @@ class TestRunner:
         print("TEST 5: Leader Failure During Consensus")
         print("="*60)
         
-        print("\n📝 Step 1: Start transaction on Node 1")
+        print("\ Step 1: Start transaction on Node 1")
         print("   In Node 1 terminal: moneyTransfer 2 30")
         input("   Press Enter after sending command...")
         
         time.sleep(1)
         
-        print("\n📝 Step 2: IMMEDIATELY fail Node 1 (leader)")
+        print("\ Step 2: IMMEDIATELY fail Node 1 (leader)")
         print("   In Node 1 terminal: failProcess")
         print("   (Do this within 1-2 seconds of step 1)")
         input("   Press Enter after sending command...")
         
         self.wait(30)  # Wait for timeout
         
-        print("\n📝 Step 3: New transaction from Node 2")
+        print("\ Step 3: New transaction from Node 2")
         print("   In Node 2 terminal: moneyTransfer 3 20")
         input("   Press Enter after sending command...")
         
         self.wait(25)
         
-        print("\n📝 Step 4: Recover Node 1")
+        print("\ Step 4: Recover Node 1")
         print("   In Node 1 terminal: fixProcess")
         input("   Press Enter after sending command...")
         
@@ -165,7 +157,7 @@ class TestRunner:
         print("TEST 7: Network Partition (Minority vs Majority)")
         print("="*60)
 
-        print("\n📝 Partition setup (two islands):")
+        print("\ Partition setup (two islands):")
         print("   Group A: Nodes 1,2   |   Group B: Nodes 3,4,5")
         print("   In Node 1 terminal: failLink 3 ; failLink 4 ; failLink 5")
         print("   In Node 2 terminal: failLink 3 ; failLink 4 ; failLink 5")
@@ -174,24 +166,24 @@ class TestRunner:
         print("   In Node 5 terminal: failLink 1 ; failLink 2")
         input("\n   Press Enter after partition is configured on all nodes...")
 
-        print("\n📝 Step A (Minority failure expected):")
+        print("\ Step A (Minority failure expected):")
         print("   In Node 1 terminal: moneyTransfer 2 10")
         print("   Expected: hangs/times out (no quorum, only 2/5 reachable)")
         input("   Press Enter after sending command...")
         self.wait(30)
 
-        print("\n📝 Step B (Majority success expected):")
+        print("\ Step B (Majority success expected):")
         print("   In Node 3 terminal: moneyTransfer 4 10")
         print("   Expected: succeeds (quorum 3/5 reachable)")
         input("   Press Enter after sending command...")
         self.wait(30)
 
-        print("\n📝 Step C: Heal partition on all nodes")
+        print("\ Step C: Heal partition on all nodes")
         print("   Run on each node: fixLink all")
         input("   Press Enter after healing all links...")
         self.wait(8)
 
-        print("\n📝 Step D: Verify sync")
+        print("\ Step D: Verify sync")
         print("   On ALL nodes, type:")
         print("   - printBlockchain")
         print("   - printBalance")
@@ -204,7 +196,7 @@ class TestRunner:
         print("TEST 6: Multiple Node Failures (2 Nodes)")
         print("="*60)
         
-        print("\n📝 Step 1: Fail 2 nodes (Node 4 and Node 5)")
+        print("\ Step 1: Fail 2 nodes (Node 4 and Node 5)")
         print("   In Node 4 terminal: failProcess")
         print("   In Node 5 terminal: failProcess")
         print("   (Fail both nodes)")
@@ -212,26 +204,26 @@ class TestRunner:
         
         self.wait(2)
         
-        print("\n📝 Step 2: Transaction with 3 remaining nodes")
+        print("\ Step 2: Transaction with 3 remaining nodes")
         print("   System should still work (majority = 3 out of 5)")
         print("   In Node 1 terminal: moneyTransfer 2 30")
         input("   Press Enter after sending command...")
         
         self.wait(25)
         
-        print("\n📝 Step 3: Another transaction with 3 nodes")
+        print("\ Step 3: Another transaction with 3 nodes")
         print("   In Node 2 terminal: moneyTransfer 3 20")
         input("   Press Enter after sending command...")
         
         self.wait(25)
         
-        print("\n📝 Step 4: Recover Node 4")
+        print("\ Step 4: Recover Node 4")
         print("   In Node 4 terminal: fixProcess")
         input("   Press Enter after sending command...")
         
         self.wait(5)
         
-        print("\n📝 Step 5: Recover Node 5")
+        print("\ Step 5: Recover Node 5")
         print("   In Node 5 terminal: fixProcess")
         input("   Press Enter after sending command...")
         

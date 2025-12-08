@@ -4,7 +4,7 @@ from utils import Logger
 
 class PaxosInstance:
     """
-    Manages the Paxos state for the current blockchain depth.
+    manager the paxos state for the current blockchain depth.
     """
     def __init__(self, node_id, num_nodes, callback_broadcast, callback_send, callback_decide, get_blockchain_depth):
         self.node_id = int(node_id)
@@ -14,32 +14,32 @@ class PaxosInstance:
         self.decide_callback = callback_decide
         self.get_depth = get_blockchain_depth
 
-        # Proposer State
+        # proposer state
         self.seq_num = 0
-        self.my_proposal_val = None # The block I want to propose
+        self.my_proposal_val = None # the block I want to propose
         self.promises = {} # node_id -> (accepted_ballot, accepted_val)
-        self.accepts_received = set() # Set of node_ids that accepted my proposal
+        self.accepts_received = set() # set of node_ids that accepted my proposal
         self.is_leader = False
         
-        # Acceptor State
+        # acceptor state
         self.max_ballot_promised = (-1, -1, -1) 
         self.accepted_ballot = (-1, -1, -1)
         self.accepted_val = None
         
-        # Timeout handling
         self.proposal_timer = None
         
-        # Track decided blocks to prevent duplicate processing
+        # track decided blocks to prevent dup processing
         self.decided_blocks = set()  # Set of block hashes that have been decided
-        # Track if current ballot has already been decided/logged (prevents duplicate logs/broadcasts)
+        # track if curr ballot has alr been decided/logged
         self.current_ballot_decided = None
 
     def compare_ballots(self, b1, b2):
         """
-        Compare two ballots.
-        Ballot structure: [seq_num, node_id, depth]
-        Comparison logic: Depth first, then seq_num, then node_id.
-        Returns: 1 if b1 > b2, -1 if b1 < b2, 0 if equal.
+        Compare two ballots
+
+        ballot structure: [seq_num, node_id, depth]
+        comparison logic: Depth first, then seq_num, then node_id.
+        returns: 1 if b1 > b2, -1 if b1 < b2, 0 if equal.
         """
         # b1: [seq1, id1, depth1]
         # b2: [seq2, id2, depth2]
@@ -53,13 +53,12 @@ class PaxosInstance:
 
     def prepare(self, block_val):
         """
-        Step 1: Proposer sends PREPARE.
+        step 1: proposer sends PREPARE.
         """
         self.my_proposal_val = block_val
         self.seq_num += 1
         current_depth = self.get_depth()
         
-        # Ballot: [seq_num, node_id, depth]
         ballot = [self.seq_num, self.node_id, current_depth]
         self.promises = {}
         self.is_leader = False
@@ -72,24 +71,21 @@ class PaxosInstance:
             "ballot": ballot
         }
         self.broadcast(msg)
-        # Also handle locally
         self.handle_prepare(msg)
         
-        # Start Timeout
         self.start_proposal_timer()
 
     def start_proposal_timer(self):
         if self.proposal_timer:
             self.proposal_timer.cancel()
             
-        # Timeout > 2 * (Max RTT + processing)
-        # Delay is 3s one way. RTT ~ 6s. Timeout should be generous, e.g. 15-20s.
+        # timeout > 2 * (max rtt + processing
+        # delay is 3s one way. RTT ~ 6s. larger timeout -> 20 sec
         self.proposal_timer = threading.Timer(20.0, self.handle_timeout)
         self.proposal_timer.start()
         
     def handle_timeout(self):
         if not self.is_leader and self.my_proposal_val:
-             # Check if node is still active (via callback if provided)
              if hasattr(self, 'is_node_active') and not self.is_node_active():
                  Logger.log(self.node_id, f"[PAXOS] Proposal Timeout, but node is failed. Cancelling retry.")
                  self.proposal_timer = None
@@ -98,12 +94,11 @@ class PaxosInstance:
              self.prepare(self.my_proposal_val)
     
     def cancel_proposal(self):
-        """Cancel any pending proposal timer. Called when node fails."""
+        """Cancel any pending proposal timerl called when node fails."""
         if self.proposal_timer:
             self.proposal_timer.cancel()
             self.proposal_timer = None
             Logger.log(self.node_id, "[PAXOS] Cancelled pending proposal due to node failure.")
-        # Clear proposal state
         self.my_proposal_val = None
         self.is_leader = False
         self.promises = {}
@@ -111,18 +106,18 @@ class PaxosInstance:
 
     def handle_prepare(self, msg):
         """
-        Step 2: Acceptor receives PREPARE.
+        step 2: acceptor receives PREPARE.
         """
         ballot = msg['ballot']
         sender = msg['sender']
         
-        # If ballot > max_ballot_promised
+        # if ballot > max_ballot_promised
         if self.compare_ballots(ballot, self.max_ballot_promised) > 0:
             self.max_ballot_promised = ballot
             
             Logger.log(self.node_id, f"[PAXOS] PROMISE to {sender} for ballot {ballot}")
             
-            # Send PROMISE
+            # send PROMISE
             response = {
                 "type": "PROMISE",
                 "sender": self.node_id,
@@ -131,35 +126,28 @@ class PaxosInstance:
                 "accepted_val": self.accepted_val
             }
             self.send(sender, response)
-        else:
-            # Optional: Send NACK or just ignore
-            pass
 
     def handle_promise(self, msg):
         """
-        Step 3: Proposer receives PROMISE.
+        step 3: Proposer receives PROMISE.
         """
         ballot = msg['ballot']
         sender = msg['sender']
         
-        # Check if this promise corresponds to my current proposal ballot
+        # check: if this promise corresponds to my current proposal ballot
         my_ballot = [self.seq_num, self.node_id, self.get_depth()]
         if self.compare_ballots(ballot, my_ballot) != 0:
-            return # Old promise or future promise?
+            return
 
-        # Store promise
-        # msg['accepted_val'] might be a dict (Block.to_dict()) or None
         self.promises[sender] = (msg['accepted_ballot'], msg['accepted_val'])
         
-        # Check for Majority
+        # check for mjority
         if len(self.promises) >= (self.num_nodes // 2) + 1 and not self.is_leader:
             self.is_leader = True
             Logger.log(self.node_id, f"[PAXOS] Majority promises received. Becoming Leader.")
             
-            # Select value
-            # If any acceptor accepted a value, pick the one with highest ballot
             highest_accepted_ballot = (-1, -1, -1)
-            val_to_propose = self.my_proposal_val.to_dict() # Default to my proposal
+            val_to_propose = self.my_proposal_val.to_dict()
             
             found_accepted_val = False
             for _, (acc_ballot, acc_val) in self.promises.items():
@@ -180,15 +168,13 @@ class PaxosInstance:
                 "val": val_to_propose
             }
             self.broadcast(accept_msg)
-            # Also handle locally
             self.handle_accept(accept_msg)
             
-            # Also reset accepted count for this phase
             self.accepts_received = set()
 
     def handle_accept(self, msg):
         """
-        Step 4: Acceptor receives ACCEPT.
+        Step 4: acceptor receives ACCEPT.
         """
         ballot = msg['ballot']
         val = msg['val']
@@ -207,7 +193,6 @@ class PaxosInstance:
                 "ballot": ballot,
                 "val": val
             }
-            # Send to Leader (sender of ACCEPT)
             self.send(sender, response)
 
     def handle_accepted(self, msg):
@@ -224,18 +209,15 @@ class PaxosInstance:
         self.accepts_received.add(sender)
         
         if len(self.accepts_received) >= (self.num_nodes // 2) + 1:
-            # Consensus Reached!
+            # Consensus is reached
             if self.proposal_timer:
                 self.proposal_timer.cancel()
                 self.proposal_timer = None
                 
-            # Ensure we only decide once per ballot
-            # Check if we've already decided this value to prevent duplicate broadcasts
+            # handle dup/ only decide once per ballot
             val_hash = msg['val']['hash'] if msg['val'] else None
             if val_hash and val_hash in self.decided_blocks:
-                # Already decided, don't broadcast again
                 return
-            # Also suppress duplicate consensus logs for the same ballot
             ballot_tuple = tuple(ballot)
             if self.current_ballot_decided == ballot_tuple:
                 return
@@ -250,13 +232,9 @@ class PaxosInstance:
             }
             self.broadcast(decide_msg)
             
-            # Also decide locally (deduplication handled in handle_decide)
             self.handle_decide(decide_msg)
-            
-            # Reset/Advance state? 
-            # In this simple version, we wait for next depth or user input.
-            # But we should clear the current proposal state so we don't spam.
-            self.accepts_received = set() # Prevent re-triggering this block
+
+            self.accepts_received = set()
 
     def handle_decide(self, msg):
         """
@@ -266,7 +244,6 @@ class PaxosInstance:
         if not val:
             return
         
-        # Deduplication: Check if we've already processed this block
         block_hash = val.get('hash')
         if block_hash and block_hash in self.decided_blocks:
             Logger.log(self.node_id, f"[PAXOS] DECIDE for block {block_hash[:16]}... already processed, ignoring duplicate")
@@ -274,24 +251,15 @@ class PaxosInstance:
         
         Logger.log(self.node_id, f"[PAXOS] DECIDE received. Committing block.")
         
-        # Mark as decided before processing (prevents race conditions)
         if block_hash:
             self.decided_blocks.add(block_hash)
         
-        # Cancel any pending proposal timeout since a decision was made for this depth
         if self.proposal_timer:
             self.proposal_timer.cancel()
             self.proposal_timer = None
             
         self.decide_callback(val)
         
-        # Reset Paxos state for next depth?
-        # The variables like max_ballot_promised should persist or be reset depending on how we treat depth.
-        # Since ballot includes depth, we can keep max_ballot_promised as is (it will just be lower depth than next).
-        # But we should clear accepted_val for the *next* round properly.
-        # However, accepted_val/ballot are for the *current* round. 
-        # Once decided, we move to next depth.
-        # We can reset accepted things for cleanliness, but depth check handles safety.
         self.accepted_val = None
         self.accepted_ballot = (-1, -1, -1)
 

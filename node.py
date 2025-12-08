@@ -21,17 +21,15 @@ class Node:
         self.ip = self.info['ip']
         self.peers = [nid for nid in self.config if nid != self.node_id]
         
-        # Blockchain & Paxos
         self.blockchain = Blockchain(self.node_id)
-        # Try to load existing state
         self.blockchain.load_from_disk()
 
-        self.failed = False # Simulation flag
-        self.network_partition = set()  # Node IDs this node will not communicate with (soft partition)
-        self.syncing = False  # Flag to track if we're currently syncing
-        self.sync_responses = []  # Store blockchain responses during sync
+        self.failed = False
+        self.network_partition = set()  # this node will NOT comm w nodes in the set 
+        self.syncing = False
+        self.sync_responses = []
         
-        # Paxos Instance
+        # paxos instance
         self.paxos = PaxosInstance(
             node_id=self.node_id,
             num_nodes=len(self.config),
@@ -40,10 +38,10 @@ class Node:
             callback_decide=self.handle_paxos_decision,
             get_blockchain_depth=lambda: len(self.blockchain.chain)
         )
-        # Add callback to check if node is active
+
         self.paxos.is_node_active = lambda: not self.failed
 
-        # Server socket
+        # server socket
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -55,7 +53,7 @@ class Node:
             
         Logger.log(self.node_id, f"Listening on {self.ip}:{self.port}")
         
-        # Threads
+        # threads
         self.running = True
         self.listen_thread = threading.Thread(target=self.accept_connections)
         self.listen_thread.daemon = True
@@ -92,13 +90,10 @@ class Node:
                 return
 
             message_str = data.decode('utf-8')
-            # Messages can be concatenated? JSON decode might fail if multiple.
-            # Assuming one connection per message for simplicity (short-lived connections)
-            # as implemented in send_msg.
             
             try:
                 msg = json.loads(message_str)
-                # Soft partition at receiver side: drop if sender is blocked
+                # sim partition
                 sender_id = str(msg.get('sender'))
                 if sender_id and sender_id in self.network_partition:
                     Logger.log(self.node_id, f"Soft-partition drop: ignoring message from Node {sender_id}")
@@ -134,11 +129,10 @@ class Node:
             Logger.log(self.node_id, f"Unknown message type: {msg_type}")
 
     def send_msg(self, target_id, message_str):
-        """Raw string sender with delay"""
-        # Don't send messages if node is failed
+        # dont send messages if node is failed
         if self.failed:
             return
-        # Soft partition: drop if target is blocked
+        # sim partition - dont send if blocked
         if str(target_id) in self.network_partition:
             Logger.log(self.node_id, f"Soft-partition drop: not sending to Node {target_id}")
             return
@@ -151,11 +145,11 @@ class Node:
         target_info = self.config[target_id]
         
         def _send():
-            # Check again after delay (node might have failed during delay)
+            # check for fialed after delay
             if self.failed:
                 return
-            time.sleep(3) # 3-second delay
-            # Final check before sending
+            time.sleep(3)
+            # final check before sending
             if self.failed:
                 return
             if target_id in self.network_partition:
@@ -176,7 +170,7 @@ class Node:
         threading.Thread(target=_send).start()
 
     def send_msg_dict(self, target_id, msg_dict):
-        """Helper to send dict as JSON"""
+        """helper to send dict as JSON"""
         self.send_msg(target_id, json.dumps(msg_dict))
 
     def broadcast(self, msg_dict):
@@ -187,7 +181,7 @@ class Node:
 
     def handle_paxos_decision(self, block_data):
         """
-        Callback from Paxos when a block is decided.
+        callback from paxos when a block is decided
         """
         if not block_data:
             return
@@ -211,7 +205,6 @@ class Node:
         self.syncing = True
         self.sync_responses = []
         
-        # Request blockchain from all peers
         request_msg = {
             "type": "REQUEST_BLOCKCHAIN",
             "sender": self.node_id,
@@ -219,9 +212,8 @@ class Node:
         }
         self.broadcast(request_msg)
         
-        # Wait for responses (with timeout)
         def wait_and_process():
-            time.sleep(8)  # Wait for responses (accounting for 3s network delay)
+            time.sleep(8)  # Wait for responses
             self.process_sync_responses()
         
         threading.Thread(target=wait_and_process).start()
@@ -255,7 +247,6 @@ class Node:
         
         Logger.log(self.node_id, f"Received blockchain from {sender_id} (length: {len(received_chain_data)}, my length: {len(self.blockchain.chain)})")
         
-        # Store response for processing
         if self.syncing:
             self.sync_responses.append({
                 'sender': sender_id,
@@ -263,21 +254,20 @@ class Node:
                 'balance_table': received_balance_table
             })
         else:
-            # If not actively syncing, process immediately
             self.process_single_response(sender_id, received_chain_data, received_balance_table)
     
     def process_single_response(self, sender_id, received_chain_data, received_balance_table):
         """Process a single blockchain response immediately."""
-        # Reconstruct chain from received data
+        # reconstruct chain from received data
         received_chain = []
         for b_data in received_chain_data:
             received_chain.append(Block.from_dict(b_data))
         
-        # If received chain is longer, update our chain
+        # if received chain is longer, update our chain
         if len(received_chain) > len(self.blockchain.chain):
             Logger.log(self.node_id, f"Received longer chain from {sender_id}. Updating blockchain...")
             
-            # Validate the received chain
+            # validate recieved chain
             if self.validate_and_update_chain(received_chain, received_balance_table):
                 Logger.log(self.node_id, f"Successfully synced blockchain. New length: {len(self.blockchain.chain)}")
                 self.blockchain.save_to_disk()
@@ -290,7 +280,7 @@ class Node:
     
     def process_sync_responses(self):
         """
-        Process all collected sync responses and pick the longest valid chain.
+        process all response and pick longest chain
         """
         if not self.sync_responses:
             Logger.log(self.node_id, "No blockchain responses received during sync.")
@@ -299,7 +289,6 @@ class Node:
         
         Logger.log(self.node_id, f"Processing {len(self.sync_responses)} blockchain responses...")
         
-        # Find the longest valid chain
         best_chain = None
         best_balance_table = None
         best_length = len(self.blockchain.chain)
@@ -310,19 +299,17 @@ class Node:
             balance_table = response['balance_table']
             
             if len(chain_data) > best_length:
-                # Reconstruct and validate chain
                 received_chain = []
                 for b_data in chain_data:
                     received_chain.append(Block.from_dict(b_data))
                 
-                # Create a temporary blockchain to validate
                 if self.validate_chain_structure(received_chain):
                     best_chain = received_chain
                     best_balance_table = balance_table
                     best_length = len(chain_data)
                     best_sender = response['sender']
         
-        # Update with best chain if found
+        # update w best chain if found
         if best_chain:
             Logger.log(self.node_id, f"Updating to longest valid chain from {best_sender} (length: {best_length})")
             if self.validate_and_update_chain(best_chain, best_balance_table):
@@ -337,7 +324,6 @@ class Node:
         self.sync_responses = []
     
     def validate_chain_structure(self, chain):
-        """Quick validation of chain structure (prev_hash links and PoW)."""
         prev_hash = "0" * 64
         for block in chain:
             if block.prev_hash != prev_hash:
@@ -351,14 +337,13 @@ class Node:
     
     def validate_and_update_chain(self, new_chain, new_balance_table):
         """
-        Validate a received chain and update if valid.
-        Returns True if update was successful.
+        Validate a received chain and update if valid
+
+        returns True if update was successful.
         """
-        # Validate the entire chain
         temp_chain = []
         temp_balance_table = {}
         
-        # Initialize balances
         for i in range(1, 6):
             temp_balance_table[str(i)] = 100
         
@@ -367,31 +352,26 @@ class Node:
         for block_data in new_chain:
             block = Block.from_dict(block_data) if isinstance(block_data, dict) else block_data
             
-            # Validate prev_hash
             if block.prev_hash != prev_hash:
                 Logger.log(self.node_id, f"Chain validation failed: prev_hash mismatch at block {len(temp_chain)}")
                 return False
             
-            # Validate PoW
             txn_string = f"{block.sender}{block.receiver}{block.amount}"
             pow_hash = compute_hash(f"{txn_string}{block.nonce}")
             if not verify_nonce(pow_hash):
                 Logger.log(self.node_id, f"Chain validation failed: invalid PoW at block {len(temp_chain)}")
                 return False
             
-            # Check balance before this transaction
             sender_bal = temp_balance_table.get(block.sender, 100)
             if sender_bal < block.amount:
                 Logger.log(self.node_id, f"Chain validation failed: insufficient funds at block {len(temp_chain)}")
                 return False
             
-            # Add block
             temp_chain.append(block)
             temp_balance_table[block.sender] = sender_bal - block.amount
             temp_balance_table[block.receiver] = temp_balance_table.get(block.receiver, 100) + block.amount
             prev_hash = block.hash
         
-        # If validation passed, update our chain
         self.blockchain.chain = temp_chain
         self.blockchain.balance_table = temp_balance_table
         
@@ -418,11 +398,11 @@ class Node:
                     dest = parts[1]
                     amt = int(parts[2])
                     
-                    # 1. Create Block
+                    # 1. create block
                     block = self.blockchain.create_block(dest, amt)
                     if block:
                         Logger.log(self.node_id, f"Initiating Paxos for block: {block.sender}->{block.receiver} ${block.amount}")
-                        # 2. Start Paxos
+                        # 2. start Paxos
                         self.paxos.prepare(block)
                     else:
                         print("Transaction failed (insufficient funds?)")
@@ -430,15 +410,21 @@ class Node:
                 elif cmd == "failProcess":
                     Logger.log(self.node_id, "Simulating Crash...")
                     self.failed = True
-                    # Cancel any pending Paxos proposals
+                    # chancel any pending paxos
                     self.paxos.cancel_proposal()
 
                 elif cmd == "fixProcess":
                     Logger.log(self.node_id, "Simulating Recovery...")
                     self.failed = False
-                    self.blockchain.load_from_disk()
+                    try:
+                        self.blockchain.load_from_disk()
+                    except ValueError as e:
+                        Logger.log(self.node_id, f"State corruption detected ({e}). Clearing local state and syncing from peers.")
+                        self.blockchain.chain = []
+                        self.blockchain.initialize_balances()
+                    
                     # Sync with other nodes after recovery
-                    time.sleep(1)  # Give a moment for network to be ready
+                    time.sleep(1)
                     self.sync_blockchain()
 
                 elif cmd == "failLink" and len(parts) == 2:
@@ -474,7 +460,6 @@ class Node:
                 else:
                     print("Unknown command.")
             except EOFError:
-                # CLI input closed, stop CLI loop but keep node running
                 break
             except Exception as e:
                 Logger.log(self.node_id, f"CLI Error: {e}")

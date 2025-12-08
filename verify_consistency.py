@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Script to verify consistency across all nodes by reading their state files.
-Run this after tests to check if all nodes have consistent state.
-"""
 
 import json
 import os
@@ -10,7 +6,7 @@ import glob
 from collections import defaultdict
 
 def load_node_state(node_id):
-    """Load state from a node's state file"""
+    """load state from a node's state file"""
     filename = f"state_node_{node_id}.json"
     if not os.path.exists(filename):
         return None
@@ -23,7 +19,7 @@ def load_node_state(node_id):
         return None
 
 def verify_consistency():
-    """Verify all nodes have consistent state"""
+    """verify all nodes have consistent state"""
     print("="*60)
     print("Consistency Checker")
     print("="*60)

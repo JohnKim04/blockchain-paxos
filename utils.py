@@ -13,7 +13,6 @@ def load_config(path='config.json'):
 class Logger:
     @staticmethod
     def log(node_id, message):
-        # Using sys.stdout to ensure immediate output in some environments
         print(f"[Node {node_id}] {message}")
         sys.stdout.flush()
 

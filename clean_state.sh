@@ -1,6 +1,6 @@
 #!/bin/bash
-# Script to clean up all state files
-# Usage: ./clean_state.sh
+# script to clean up all state files
+# usage: ./clean_state.sh
 
 echo "Cleaning up state files..."
 rm -f state_node_*.json
